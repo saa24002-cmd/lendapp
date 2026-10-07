@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学校備品 貸出・返却管理システム</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter & Noto Sans JP -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+        }
+        /* Custom smooth transition styles */
+        .badge-overdue {
+            animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+
+    <!-- Header / Navigation Bar -->
+    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/10 p-2 rounded-lg backdrop-blur-sm">
+                    <i class="fa-solid me-1 fa-boxes-packing text-2xl text-amber-300"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight">学校備品 貸出管理</h1>
+                    <p class="text-xs text-indigo-200 hidden sm:block">工具・機材の貸出・返却トータルシステム</p>
+                </div>
+            </div>
+
+            <!-- User Auth Info / Controls -->
+            <div id="auth-header-container" class="flex items-center space-x-3">
+                <!-- Loading Auth State -->
+                <div id="auth-loading" class="text-xs text-indigo-200 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i> 認証中...
+                </div>
+
+                <!-- Unauthenticated View -->
+                <button id="btn-login-header" class="hidden bg-amber-400 hover:bg-amber-300 text-indigo-950 font-semibold px-4 py-2 rounded-lg text-sm shadow transition duration-150 items-center space-x-2">
+                    <i class="fa-brands fa-google"></i>
+                    <span>ログイン</span>
+                </button>
+
+                <!-- Authenticated View -->
+                <div id="user-info-box" class="hidden flex items-center space-x-3">
+                    <div class="flex items-center space-x-2 bg-indigo-800/60 px-3 py-1.5 rounded-full border border-indigo-500/30">
+                        <img id="user-avatar" class="w-7 h-7 rounded-full object-cover border border-white/40" src="https://placehold.co/100x100/e2e8f0/475569?text=User" alt="Avatar" />
+                        <span id="user-name" class="text-xs sm:text-sm font-medium max-w-[120px] sm:max-w-[180px] truncate">ユーザー名</span>
+                    </div>
+                    <button id="btn-logout" class="bg-indigo-800 hover:bg-indigo-900 text-xs sm:text-sm text-indigo-100 hover:text-white px-3 py-1.5 rounded-lg border border-indigo-600 transition duration-150 flex items-center gap-1.5" title="ログアウト">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                        <span class="hidden sm:inline">ログアウト</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Login Prompt Banner (Shown when not logged in) -->
+        <div id="login-required-banner" class="hidden bg-white rounded-2xl shadow-md border border-slate-200 p-8 text-center max-w-2xl mx-auto my-12">
+            <div class="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-600">
+                <i class="fa-solid fa-shield-halved text-4xl"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-800 mb-2">ログインが必要です</h2>
+            <p class="text-slate-600 mb-6 text-sm sm:text-base">
+                学校の備品（工具・機材・教材など）の貸出記録および返却状況の更新を行うには、Googleアカウントでログインしてください。
+            </p>
+            <button id="btn-login-main" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg transition duration-200 inline-flex items-center space-x-3 text-base hover:scale-105 transform">
+                <i class="fa-brands fa-google text-xl text-amber-300"></i>
+                <span>Googleアカウントでログイン</span>
+            </button>
+        </div>
+
+        <!-- App Dashboard Area (Shown when logged in) -->
+        <div id="app-dashboard" class="hidden space-y-6">
+
+            <!-- Stats Summary Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">総登録件数</p>
+                        <p id="stat-total" class="text-2xl font-bold text-slate-800 mt-1">0</p>
+                    </div>
+                    <div class="p-3 bg-slate-100 rounded-lg text-slate-600">
+                        <i class="fa-solid fa-list-check text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-amber-200 bg-amber-50/30 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-amber-700 uppercase tracking-wider">貸出中 (未返却)</p>
+                        <p id="stat-borrowed" class="text-2xl font-bold text-amber-600 mt-1">0</p>
+                    </div>
+                    <div class="p-3 bg-amber-100 rounded-lg text-amber-600">
+                        <i class="fa-solid fa-hand-holding text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-rose-200 bg-rose-50/30 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-rose-700 uppercase tracking-wider">延滞中</p>
+                        <p id="stat-overdue" class="text-2xl font-bold text-rose-600 mt-1">0</p>
+                    </div>
+                    <div class="p-3 bg-rose-100 rounded-lg text-rose-600">
+                        <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-emerald-700 uppercase tracking-wider">返却済み</p>
+                        <p id="stat-returned" class="text-2xl font-bold text-emerald-600 mt-1">0</p>
+                    </div>
+                    <div class="p-3 bg-emerald-100 rounded-lg text-emerald-600">
+                        <i class="fa-solid fa-circle-check text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Section: Borrow Equipment -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-slate-100/80 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-plus-circle text-indigo-600"></i> 新しい備品の貸出を記録する
+                    </h2>
+                    <span class="text-xs text-slate-500">* 印は必須項目</span>
+                </div>
+
+                <form id="borrow-form" class="p-6 space-y-4" novalidate>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+                        <!-- Item Name -->
+                        <div>
+                            <label for="input-item" class="block text-xs font-semibold text-slate-700 mb-1">
+                                備品名 <span class="text-rose-500">*</span>
+                            </label>
+                            <div class="relative">
+                                <input type="text" id="input-item" placeholder="例: 電動ドライバー, プロジェクター"
+                                       class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                                <i class="fa-solid fa-wrench absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                            </div>
+                            <p id="error-item" class="text-xs text-rose-500 mt-1 hidden"><i class="fa-solid fa-circle-exclamation"></i> 備品名を入力してください</p>
+                        </div>
+
+                        <!-- Borrower Name -->
+                        <div>
+                            <label for="input-borrower" class="block text-xs font-semibold text-slate-700 mb-1">
+                                借りた人の名前 <span class="text-rose-500">*</span>
+                            </label>
+                            <div class="relative">
+                                <input type="text" id="input-borrower" placeholder="例: 山田太郎, 3年A組"
+                                       class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                                <i class="fa-solid fa-user absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                            </div>
+                            <p id="error-borrower" class="text-xs text-rose-500 mt-1 hidden"><i class="fa-solid fa-circle-exclamation"></i> 借りた人の名前を入力してください</p>
+                        </div>
+
+                        <!-- Borrow Date -->
+                        <div>
+                            <label for="input-borrow-date" class="block text-xs font-semibold text-slate-700 mb-1">
+                                貸出日 <span class="text-rose-500">*</span>
+                            </label>
+                            <input type="date" id="input-borrow-date"
+                                   class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                            <p id="error-borrow-date" class="text-xs text-rose-500 mt-1 hidden"><i class="fa-solid fa-circle-exclamation"></i> 貸出日を選択してください</p>
+                        </div>
+
+                        <!-- Due Date -->
+                        <div>
+                            <label for="input-due-date" class="block text-xs font-semibold text-slate-700 mb-1">
+                                返却予定日 <span class="text-rose-500">*</span>
+                            </label>
+                            <input type="date" id="input-due-date"
+                                   class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                            <p id="error-due-date" class="text-xs text-rose-500 mt-1 hidden"><i class="fa-solid fa-circle-exclamation"></i> 返却予定日を選択してください</p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end pt-2">
+                        <button type="submit" id="btn-submit" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2.5 rounded-lg shadow transition duration-150 flex items-center justify-center gap-2 text-sm">
+                            <i class="fa-solid fa-paper-plane"></i>
+                            <span>貸出を登録する</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Search & Filter Controls -->
+            <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm space-y-3 md:space-y-0 md:flex md:items-center md:justify-between gap-4">
+                <!-- Keyword Search -->
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                    <input type="text" id="search-input" placeholder="備品名や借りた人の名前でリアルタイム検索..."
+                           class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition">
+                </div>
+
+                <!-- Status Filter & Sort -->
+                <div class="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+                    <span class="text-xs text-slate-500 font-medium whitespace-nowrap">絞り込み:</span>
+                    <select id="filter-status" class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 bg-white">
+                        <option value="all">すべて表示</option>
+                        <option value="unreturned" selected>未返却のみ (貸出中＋延滞)</option>
+                        <option value="overdue">延滞中のみ</option>
+                        <option value="returned">返却済みのみ</option>
+                    </select>
+
+                    <button id="btn-reset-filters" class="p-2 text-xs border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 transition whitespace-nowrap" title="フィルターリセット">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Equipment Rental Records List -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
+                        <i class="fa-solid fa-list text-indigo-600"></i> 貸出レコード一覧
+                    </h3>
+                    <span id="record-count" class="text-xs bg-indigo-100 text-indigo-800 font-semibold px-2.5 py-1 rounded-full">0 件</span>
+                </div>
+
+                <!-- Desktop / Tablet Table View -->
+                <div class="hidden md:block overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100/70 text-slate-600 text-xs uppercase font-semibold border-b border-slate-200">
+                                <th class="py-3.5 px-4">状態</th>
+                                <th class="py-3.5 px-4">備品名</th>
+                                <th class="py-3.5 px-4">借りた人</th>
+                                <th class="py-3.5 px-4">貸出日</th>
+                                <th class="py-3.5 px-4">返却予定日</th>
+                                <th class="py-3.5 px-4 text-center">返却状況切替</th>
+                                <th class="py-3.5 px-4 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body" class="divide-y divide-slate-200 text-sm">
+                            <!-- JS Dynamically populated -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Responsive List View -->
+                <div id="mobile-card-container" class="md:hidden divide-y divide-slate-200">
+                    <!-- JS Dynamically populated -->
+                </div>
+
+                <!-- Empty State -->
+                <div id="empty-state" class="hidden p-12 text-center">
+                    <i class="fa-regular fa-folder-open text-4xl text-slate-300 mb-3"></i>
+                    <p class="text-slate-500 font-medium">条件に該当する貸出記録が見つかりませんでした</p>
+                    <p class="text-xs text-slate-400 mt-1">新しい貸出を登録するか、検索・絞り込み条件を変更してください。</p>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+            &copy; 学校備品貸出・返却管理 Web Application
+        </div>
+    </footer>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Firebase Module Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
+        import {
+            getAuth,
+            GoogleAuthProvider,
+            signInWithPopup,
+            signOut,
+            onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-auth.js";
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            updateDoc,
+            deleteDoc,
+            doc,
+            onSnapshot,
+            query,
+            orderBy,
+            serverTimestamp
+        } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-firestore.js";
+
+        // Firebase Configuration provided by user
+        const firebaseConfig = {
+            apiKey: "AIzaSyCG3rKwd9LInGDXFT8hFQGQ5K7kEsjJuaA",
+            authDomain: "bihin1.firebaseapp.com",
+            projectId: "bihin1",
+            storageBucket: "bihin1.firebasestorage.app",
+            messagingSenderId: "749324580245",
+            appId: "1:749324580245:web:36b15e275de8e3d0b9b29c"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const googleProvider = new GoogleAuthProvider();
+
+        // State Management
+        let currentUser = null;
+        let rentalRecords = [];
+        let unsubscribeSnapshot = null;
+
+        // DOM Elements
+        const authLoading = document.getElementById('auth-loading');
+        const btnLoginHeader = document.getElementById('btn-login-header');
+        const btnLoginMain = document.getElementById('btn-login-main');
+        const btnLogout = document.getElementById('btn-logout');
+        const userInfoBox = document.getElementById('user-info-box');
+        const userName = document.getElementById('user-name');
+        const userAvatar = document.getElementById('user-avatar');
+
+        const loginRequiredBanner = document.getElementById('login-required-banner');
+        const appDashboard = document.getElementById('app-dashboard');
+
+        const borrowForm = document.getElementById('borrow-form');
+        const inputItem = document.getElementById('input-item');
+        const inputBorrower = document.getElementById('input-borrower');
+        const inputBorrowDate = document.getElementById('input-borrow-date');
+        const inputDueDate = document.getElementById('input-due-date');
+
+        const searchInput = document.getElementById('search-input');
+        const filterStatus = document.getElementById('filter-status');
+        const btnResetFilters = document.getElementById('btn-reset-filters');
+
+        const tableBody = document.getElementById('table-body');
+        const mobileCardContainer = document.getElementById('mobile-card-container');
+        const emptyState = document.getElementById('empty-state');
+        const recordCount = document.getElementById('record-count');
+
+        // Stats Elements
+        const statTotal = document.getElementById('stat-total');
+        const statBorrowed = document.getElementById('stat-borrowed');
+        const statOverdue = document.getElementById('stat-overdue');
+        const statReturned = document.getElementById('stat-returned');
+
+        // Helper: Format Date YYYY-MM-DD
+        function getFormattedDate(date) {
+            const d = date ? new Date(date) : new Date();
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        // Helper: Check if Overdue
+        function isOverdue(dueDateString, status) {
+            if (status === 'returned') return false;
+            const today = getFormattedDate(new Date());
+            return dueDateString < today;
+        }
+
+        // Helper: Toast Notifications
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgColor = type === 'success' ? 'bg-emerald-600' :
+                            type === 'error' ? 'bg-rose-600' : 'bg-slate-800';
+            const icon = type === 'success' ? 'fa-circle-check' :
+                         type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-info';
+
+            toast.className = `${bgColor} text-white text-sm px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} text-lg"></i>
+                <span>${message}</span>
+            `;
+
+            toastContainer.appendChild(toast);
+
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            // Animate out and remove
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Helper: Set Default Dates on Form
+        function setDefaultDates() {
+            const today = new Date();
+            const oneWeekLater = new Date();
+            oneWeekLater.setDate(today.getDate() + 7);
+
+            inputBorrowDate.value = getFormattedDate(today);
+            inputDueDate.value = getFormattedDate(oneWeekLater);
+        }
+
+        // Login Handler
+        async function handleGoogleLogin() {
+            try {
+                await signInWithPopup(auth, googleProvider);
+                showToast('ログインに成功しました', 'success');
+            } catch (error) {
+                console.error("Login Error:", error);
+                showToast('ログイン処理中にエラーが発生しました', 'error');
+            }
+        }
+
+        // Logout Handler
+        async function handleLogout() {
+            try {
+                await signOut(auth);
+                showToast('ログアウトしました', 'info');
+            } catch (error) {
+                console.error("Logout Error:", error);
+                showToast('ログアウト処理中にエラーが発生しました', 'error');
+            }
+        }
+
+        // Auth Listeners
+        btnLoginHeader.addEventListener('click', handleGoogleLogin);
+        btnLoginMain.addEventListener('click', handleGoogleLogin);
+        btnLogout.addEventListener('click', handleLogout);
+
+        // Listen to Auth state changes
+        onAuthStateChanged(auth, (user) => {
+            authLoading.classList.add('hidden');
+
+            if (user) {
+                currentUser = user;
+                // UI Updates
+                btnLoginHeader.classList.add('hidden');
+                userInfoBox.classList.remove('hidden');
+                userName.textContent = user.displayName || 'ユーザー';
+                userAvatar.src = user.photoURL || 'https://placehold.co/100x100/e2e8f0/475569?text=User';
+
+                loginRequiredBanner.classList.add('hidden');
+                appDashboard.classList.remove('hidden');
+
+                // Auto-fill borrower name with logged in user's display name
+                if (user.displayName) {
+                    inputBorrower.value = user.displayName;
+                }
+
+                setDefaultDates();
+                subscribeToEquipmentData();
+            } else {
+                currentUser = null;
+                btnLoginHeader.classList.remove('hidden');
+                userInfoBox.classList.add('hidden');
+
+                loginRequiredBanner.classList.remove('hidden');
+                appDashboard.classList.add('hidden');
+
+                if (unsubscribeSnapshot) {
+                    unsubscribeSnapshot();
+                }
+            }
+        });
+
+        // Subscribe to Firestore collection
+        function subscribeToEquipmentData() {
+            const q = query(
+                collection(db, 'equipment_rentals'),
+                orderBy('createdAt', 'desc')
+            );
+
+            unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+                rentalRecords = [];
+                snapshot.forEach((docSnap) => {
+                    rentalRecords.push({
+                        id: docSnap.id,
+                        ...docSnap.data()
+                    });
+                });
+                renderUI();
+            }, (error) => {
+                console.error("Firestore Listen Error:", error);
+                showToast("データ同期エラーが発生しました", "error");
+            });
+        }
+
+        // Form Validation & Submit
+        borrowForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Clear errors
+            document.querySelectorAll('[id^="error-"]').forEach(el => el.classList.add('hidden'));
+
+            const item = inputItem.value.trim();
+            const borrower = inputBorrower.value.trim();
+            const borrowDate = inputBorrowDate.value;
+            const dueDate = inputDueDate.value;
+
+            let hasError = false;
+
+            if (!item) {
+                document.getElementById('error-item').classList.remove('hidden');
+                hasError = true;
+            }
+            if (!borrower) {
+                document.getElementById('error-borrower').classList.remove('hidden');
+                hasError = true;
+            }
+            if (!borrowDate) {
+                document.getElementById('error-borrow-date').classList.remove('hidden');
+                hasError = true;
+            }
+            if (!dueDate) {
+                document.getElementById('error-due-date').classList.remove('hidden');
+                hasError = true;
+            }
+
+            if (hasError) return;
+
+            try {
+                const btnSubmit = document.getElementById('btn-submit');
+                btnSubmit.disabled = true;
+                btnSubmit.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> 登録中...`;
+
+                await addDoc(collection(db, 'equipment_rentals'), {
+                    itemName: item,
+                    borrowerName: borrower,
+                    borrowDate: borrowDate,
+                    dueDate: dueDate,
+                    status: 'borrowed', // 'borrowed' or 'returned'
+                    createdByUid: currentUser.uid,
+                    createdByName: currentUser.displayName || '匿名',
+                    createdAt: serverTimestamp()
+                });
+
+                // Reset inputs
+                inputItem.value = '';
+                // Keep borrower name as current logged in user name
+                inputBorrower.value = currentUser.displayName || '';
+                setDefaultDates();
+
+                showToast('貸出記録を登録しました！', 'success');
+            } catch (err) {
+                console.error("Add record error:", err);
+                showToast('登録に失敗しました。もう一度お試しください。', 'error');
+            } finally {
+                const btnSubmit = document.getElementById('btn-submit');
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = `<i class="fa-solid fa-paper-plane"></i> <span>貸出を登録する</span>`;
+            }
+        });
+
+        // Toggle Return Status (返却済み / 未返却)
+        window.toggleReturnStatus = async function(id, currentStatus) {
+            const newStatus = currentStatus === 'returned' ? 'borrowed' : 'returned';
+            try {
+                const itemRef = doc(db, 'equipment_rentals', id);
+                await updateDoc(itemRef, {
+                    status: newStatus,
+                    returnedAt: newStatus === 'returned' ? serverTimestamp() : null
+                });
+                showToast(newStatus === 'returned' ? '「返却済み」に更新しました' : '「未返却」に変更しました', 'info');
+            } catch (error) {
+                console.error("Update Status Error:", error);
+                showToast('ステータス更新に失敗しました', 'error');
+            }
+        };
+
+        // Delete Record
+        window.deleteRecord = async function(id, itemName) {
+            if (!window.confirm(`「${itemName}」の貸出レコードを削除しても宜しいですか？`)) return;
+
+            try {
+                await deleteDoc(doc(db, 'equipment_rentals', id));
+                showToast('レコードを削除しました', 'info');
+            } catch (error) {
+                console.error("Delete Error:", error);
+                showToast('削除に失敗しました', 'error');
+            }
+        };
+
+        // Search & Filter Listeners
+        searchInput.addEventListener('input', renderUI);
+        filterStatus.addEventListener('change', renderUI);
+
+        btnResetFilters.addEventListener('click', () => {
+            searchInput.value = '';
+            filterStatus.value = 'unreturned';
+            renderUI();
+        });
+
+        // Primary Render Function
+        function renderUI() {
+            const keyword = searchInput.value.toLowerCase().trim();
+            const statusFilter = filterStatus.value;
+
+            // 1. Calculate Summary Stats
+            let totalCount = rentalRecords.length;
+            let borrowedCount = 0;
+            let overdueCount = 0;
+            let returnedCount = 0;
+
+            rentalRecords.forEach(rec => {
+                if (rec.status === 'returned') {
+                    returnedCount++;
+                } else {
+                    borrowedCount++;
+                    if (isOverdue(rec.dueDate, rec.status)) {
+                        overdueCount++;
+                    }
+                }
+            });
+
+            statTotal.textContent = totalCount;
+            statBorrowed.textContent = borrowedCount;
+            statOverdue.textContent = overdueCount;
+            statReturned.textContent = returnedCount;
+
+            // 2. Filter Records based on search & filter dropdown
+            const filteredRecords = rentalRecords.filter(rec => {
+                // Keyword match (Item Name or Borrower Name)
+                const matchesKeyword = rec.itemName.toLowerCase().includes(keyword) ||
+                                       rec.borrowerName.toLowerCase().includes(keyword);
+
+                if (!matchesKeyword) return false;
+
+                const overdue = isOverdue(rec.dueDate, rec.status);
+
+                // Status Filter logic
+                if (statusFilter === 'unreturned') {
+                    return rec.status === 'borrowed';
+                } else if (statusFilter === 'overdue') {
+                    return rec.status === 'borrowed' && overdue;
+                } else if (statusFilter === 'returned') {
+                    return rec.status === 'returned';
+                }
+                return true; // 'all'
+            });
+
+            recordCount.textContent = `${filteredRecords.length} 件`;
+
+            // Toggle empty state
+            if (filteredRecords.length === 0) {
+                tableBody.innerHTML = '';
+                mobileCardContainer.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            // 3. Render Desktop Table Body
+            tableBody.innerHTML = filteredRecords.map(rec => {
+                const overdue = isOverdue(rec.dueDate, rec.status);
+                const isReturned = rec.status === 'returned';
+
+                let rowBgClass = 'hover:bg-slate-50/80';
+                if (overdue) rowBgClass = 'bg-rose-50/50 hover:bg-rose-50';
+                if (isReturned) rowBgClass = 'bg-slate-50/40 text-slate-400 hover:bg-slate-50';
+
+                // Status Badge HTML
+                let statusBadgeHTML = '';
+                if (isReturned) {
+                    statusBadgeHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-check"></i> 返却済み</span>`;
+                } else if (overdue) {
+                    statusBadgeHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 badge-overdue"><i class="fa-solid fa-triangle-exclamation"></i> 延滞中</span>`;
+                } else {
+                    statusBadgeHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800"><i class="fa-solid fa-clock"></i> 貸出中</span>`;
+                }
+
+                return `
+                    <tr class="${rowBgClass} transition duration-150">
+                        <td class="py-3.5 px-4">${statusBadgeHTML}</td>
+                        <td class="py-3.5 px-4 font-semibold ${isReturned ? 'line-through text-slate-400' : 'text-slate-800'}">
+                            ${escapeHTML(rec.itemName)}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-700">
+                            <i class="fa-regular fa-user text-xs text-slate-400 mr-1"></i>${escapeHTML(rec.borrowerName)}
+                        </td>
+                        <td class="py-3.5 px-4 text-slate-600 text-xs">${rec.borrowDate}</td>
+                        <td class="py-3.5 px-4 text-xs font-medium ${overdue ? 'text-rose-600 font-bold' : 'text-slate-700'}">
+                            ${rec.dueDate}
+                        </td>
+                        <td class="py-3.5 px-4 text-center">
+                            <button onclick="toggleReturnStatus('${rec.id}', '${rec.status}')"
+                                    class="text-xs px-3 py-1.5 rounded-lg border font-medium shadow-sm transition duration-150 ${
+                                        isReturned
+                                        ? 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                        : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                    }">
+                                <i class="fa-solid ${isReturned ? 'fa-rotate-left' : 'fa-check'} mr-1"></i>
+                                ${isReturned ? '未返却に戻す' : '返却済みにする'}
+                            </button>
+                        </td>
+                        <td class="py-3.5 px-4 text-right">
+                            <button onclick="deleteRecord('${rec.id}', '${escapeQuotes(rec.itemName)}')"
+                                    class="text-slate-400 hover:text-rose-600 p-1.5 rounded transition" title="削除">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // 4. Render Mobile Card Container
+            mobileCardContainer.innerHTML = filteredRecords.map(rec => {
+                const overdue = isOverdue(rec.dueDate, rec.status);
+                const isReturned = rec.status === 'returned';
+
+                let cardBorderClass = 'border-l-4 border-l-amber-500';
+                if (overdue) cardBorderClass = 'border-l-4 border-l-rose-500 bg-rose-50/30';
+                if (isReturned) cardBorderClass = 'border-l-4 border-l-emerald-500 bg-slate-50/60 opacity-80';
+
+                return `
+                    <div class="p-4 space-y-3 ${cardBorderClass}">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <h4 class="font-bold text-slate-800 ${isReturned ? 'line-through text-slate-400' : ''}">${escapeHTML(rec.itemName)}</h4>
+                                <p class="text-xs text-slate-600 mt-0.5"><i class="fa-regular fa-user mr-1"></i>借りた人: <span class="font-medium text-slate-800">${escapeHTML(rec.borrowerName)}</span></p>
+                            </div>
+                            <div>
+                                ${
+                                    isReturned ? '<span class="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">返却済み</span>' :
+                                    overdue ? '<span class="text-xs px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold badge-overdue">🚨 延滞中</span>' :
+                                    '<span class="text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold">貸出中</span>'
+                                }
+                            </div>
+                        </div>
+
+                        <div class="flex text-xs text-slate-500 gap-4 pt-1 border-t border-slate-100">
+                            <div>貸出: <span class="text-slate-700">${rec.borrowDate}</span></div>
+                            <div>返却予定: <span class="${overdue ? 'text-rose-600 font-bold' : 'text-slate-700'}">${rec.dueDate}</span></div>
+                        </div>
+
+                        <div class="flex justify-between items-center pt-2">
+                            <button onclick="toggleReturnStatus('${rec.id}', '${rec.status}')"
+                                    class="text-xs px-3 py-1.5 rounded-lg border font-medium shadow-sm transition duration-150 ${
+                                        isReturned
+                                        ? 'bg-white text-slate-600 border-slate-300'
+                                        : 'bg-emerald-600 text-white border-emerald-600'
+                                    }">
+                                <i class="fa-solid ${isReturned ? 'fa-rotate-left' : 'fa-check'} mr-1"></i>
+                                ${isReturned ? '未返却に戻す' : '返却済みにする'}
+                            </button>
+
+                            <button onclick="deleteRecord('${rec.id}', '${escapeQuotes(rec.itemName)}')"
+                                    class="text-slate-400 hover:text-rose-600 text-sm p-1.5" title="削除">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Helper: Escape HTML to prevent XSS
+        function escapeHTML(str) {
+            return str ? str.replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            ) : '';
+        }
+
+        function escapeQuotes(str) {
+            return str ? str.replace(/'/g, "\\'") : '';
+        }
+    </script>
+</body>
+</html>
